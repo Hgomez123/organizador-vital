@@ -122,9 +122,24 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
         setEstado("denegado");
         return;
       }
-      const reg = await navigator.serviceWorker.ready;
+      // `serviceWorker.ready` puede no resolver nunca en la primera visita
+      // a un origen. Sin este límite, el panel se queda cargando en blanco.
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<null>((r) => setTimeout(() => r(null), 4000)),
+      ]);
+
+      if (!reg) {
+        setEstado("inactivo");
+        return;
+      }
+
       const sub = await reg.pushManager.getSubscription();
-      setEstado(sub ? "activo" : "inactivo");
+
+      // Ambas condiciones: una suscripción sin permiso concedido no entrega
+      // nada. Dar por activo solo por la suscripción ocultaba el botón de
+      // conectar justo cuando hacía falta.
+      setEstado(sub && Notification.permission === "granted" ? "activo" : "inactivo");
     })();
 
     return () => window.removeEventListener("beforeinstallprompt", alInstalar);
@@ -139,13 +154,32 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
         setEstado(permiso === "denied" ? "denegado" : "inactivo");
         return;
       }
+      // Asegura que el service worker esté registrado y activo antes de
+      // suscribir: en la primera visita puede no estarlo todavía.
+      await navigator.serviceWorker.register("/sw.js").catch(() => {});
       const reg = await navigator.serviceWorker.ready;
-      const sub =
-        (await reg.pushManager.getSubscription()) ??
-        (await reg.pushManager.subscribe({
+
+      let sub = await reg.pushManager.getSubscription();
+
+      // Una suscripción creada con otra clave VAPID no sirve y hay que
+      // reemplazarla, no reutilizarla.
+      if (sub) {
+        const actual = new Uint8Array(sub.options.applicationServerKey ?? new ArrayBuffer(0));
+        const esperada = base64UrlABytes(clavePublica!);
+        const coincide =
+          actual.length === esperada.length && actual.every((b, i) => b === esperada[i]);
+        if (!coincide) {
+          await sub.unsubscribe().catch(() => {});
+          sub = null;
+        }
+      }
+
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: base64UrlABytes(clavePublica!),
-        }));
+        });
+      }
 
       const res = await fetch("/api/push/subscribe", {
         method: "POST",
