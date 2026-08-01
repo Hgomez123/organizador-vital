@@ -1,4 +1,5 @@
 import "server-only";
+import { createECDH } from "node:crypto";
 import webpush from "web-push";
 import { prisma } from "./prisma";
 
@@ -71,6 +72,45 @@ function configurar(): boolean {
 export function estadoConfiguracion(): { ok: boolean; motivo: string | null } {
   const ok = configurar();
   return { ok, motivo: fallaConfiguracion };
+}
+
+/**
+ * Verifica que la clave pública sea realmente la pareja de la privada.
+ *
+ * Deriva el punto público a partir del escalar privado sobre la curva
+ * P-256 y lo compara con la pública configurada. Si no coinciden, el
+ * servicio de push responde 403 BadJwtToken — un error que no dice
+ * nada sobre su causa real.
+ */
+export function clavesEmparejadas(): { ok: boolean; detalle: string } {
+  try {
+    const aBytes = (s: string) =>
+      Buffer.from(limpiar(s).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+
+    const publica = aBytes(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "");
+    const privada = aBytes(process.env.VAPID_PRIVATE_KEY ?? "");
+
+    if (privada.length !== 32) {
+      return { ok: false, detalle: `La clave privada mide ${privada.length} bytes; deben ser 32` };
+    }
+    if (publica.length !== 65) {
+      return { ok: false, detalle: `La clave pública mide ${publica.length} bytes; deben ser 65` };
+    }
+
+    const ecdh = createECDH("prime256v1");
+    ecdh.setPrivateKey(privada);
+    const derivada = ecdh.getPublicKey();
+
+    return derivada.equals(publica)
+      ? { ok: true, detalle: "El par de claves coincide" }
+      : {
+          ok: false,
+          detalle:
+            "La clave pública NO corresponde a la privada. Genera un par nuevo y pon AMBAS en Vercel.",
+        };
+  } catch (e) {
+    return { ok: false, detalle: e instanceof Error ? e.message : "No se pudo verificar el par" };
+  }
 }
 
 export type ResultadoEnvio = {

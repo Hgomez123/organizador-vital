@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/user";
-import { enviarAUsuario, pushDisponible, estadoConfiguracion } from "@/lib/push";
+import {
+  enviarAUsuario,
+  pushDisponible,
+  estadoConfiguracion,
+  clavesEmparejadas,
+} from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,10 +57,13 @@ export async function POST() {
 /** GET: comprueba la configuración sin enviar nada. Útil desde el navegador. */
 export async function GET() {
   const cfg = estadoConfiguracion();
+  const par = clavesEmparejadas();
   return NextResponse.json({
     clavesPresentes: pushDisponible(),
     configuracionValida: cfg.ok,
     motivo: cfg.motivo,
     vapidSubject: process.env.VAPID_SUBJECT ?? "(sin definir)",
+    parDeClavesCoincide: par.ok,
+    detalleClaves: par.detalle,
   });
 }
