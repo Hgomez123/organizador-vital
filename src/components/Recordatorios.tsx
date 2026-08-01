@@ -241,6 +241,46 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
     }
   };
 
+  /**
+   * Reinicio completo: borra suscripción, service worker y cachés.
+   *
+   * Necesario cuando cambian las claves VAPID. El service worker guarda
+   * el código antiguo, así que el navegador vuelve a suscribirse con la
+   * clave pública vieja y el servicio de push responde BadJwtToken para
+   * siempre. Sin limpiar la caché no hay forma de salir del bucle.
+   */
+  const reiniciar = async () => {
+    setOcupado(true);
+    setAviso("Limpiando…");
+    try {
+      // 1. Borra todas las suscripciones de este usuario en el servidor
+      await fetch("/api/push/unsubscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }).catch(() => {});
+
+      // 2. Cancela la suscripción local
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = await reg?.pushManager.getSubscription();
+      await sub?.unsubscribe().catch(() => {});
+
+      // 3. Elimina el service worker y todas sus cachés
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+      if ("caches" in window) {
+        const claves = await caches.keys();
+        await Promise.all(claves.map((k) => caches.delete(k)));
+      }
+
+      setAviso("Listo. Recargando con el código nuevo…");
+      setTimeout(() => window.location.reload(), 900);
+    } catch (e) {
+      setAviso(e instanceof Error ? e.message : "No pude limpiar.");
+      setOcupado(false);
+    }
+  };
+
   const probar = async () => {
     setOcupado(true);
     setAviso(null);
@@ -455,12 +495,21 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
 
         {/* Diagnóstico: sin esto, "no llega nada" es imposible de depurar */}
         <div className="border-t border-line pt-4">
-          <button
-            onClick={() => (verDiag ? setVerDiag(false) : revisar())}
-            className="label transition-colors hover:text-fg"
-          >
-            {verDiag ? "Ocultar diagnóstico" : "Ver diagnóstico ↓"}
-          </button>
+          <div className="flex flex-wrap items-center gap-4">
+            <button
+              onClick={() => (verDiag ? setVerDiag(false) : revisar())}
+              className="label transition-colors hover:text-fg"
+            >
+              {verDiag ? "Ocultar diagnóstico" : "Ver diagnóstico ↓"}
+            </button>
+            <button
+              onClick={reiniciar}
+              disabled={ocupado}
+              className="label transition-colors hover:text-alert"
+            >
+              Reiniciar por completo ⟳
+            </button>
+          </div>
 
           {verDiag && (
             <dl className="subpanel mt-3 divide-y divide-line p-3">

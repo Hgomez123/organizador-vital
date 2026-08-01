@@ -159,9 +159,17 @@ export async function enviarAUsuario(userId: string, carga: Carga): Promise<Resu
         const err = e as { statusCode?: number; body?: string; message?: string };
         const codigo = err?.statusCode;
 
-        // 404/410: el dispositivo ya no existe. Conservarla solo genera
-        // ruido en cada envío futuro.
-        if (codigo === 404 || codigo === 410) {
+        const cuerpo = err?.body ?? "";
+
+        // Suscripciones irrecuperables:
+        //  404/410 → el dispositivo ya no existe.
+        //  403 BadJwtToken → se creó con OTRA clave pública; ninguna firma
+        //  actual podrá validarla jamás. Conservarlas solo genera ruido
+        //  en todos los envíos futuros.
+        const muerta =
+          codigo === 404 || codigo === 410 || (codigo === 403 && /BadJwtToken/i.test(cuerpo));
+
+        if (muerta) {
           await prisma.pushSubscription.delete({ where: { id: s.id } }).catch(() => {});
           eliminados++;
           return;

@@ -11,7 +11,7 @@
  * estáticos inmutables.
  */
 
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE_APP = `vital-app-${VERSION}`;
 const ARMAZON = ["/", "/semana", "/comidas", "/metas", "/manifest.webmanifest", "/icons/icon-192.png"];
 
