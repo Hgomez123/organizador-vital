@@ -17,5 +17,15 @@ export async function POST() {
     url: "/",
   });
 
-  return NextResponse.json({ ok: r.enviados > 0, ...r });
+  // El asunto VAPID es la causa más común de rechazo: Apple exige un
+  // mailto: o https: válido en el token, y falla en silencio si no lo es.
+  const asunto = process.env.VAPID_SUBJECT ?? "(sin definir)";
+  const asuntoValido = /^(mailto:\S+@\S+|https:\/\/\S+)$/.test(asunto);
+
+  return NextResponse.json({
+    ok: r.enviados > 0,
+    ...r,
+    vapidSubject: asunto,
+    vapidSubjectValido: asuntoValido,
+  });
 }

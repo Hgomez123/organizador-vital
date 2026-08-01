@@ -37,7 +37,13 @@ function configurar(): boolean {
   return true;
 }
 
-export type ResultadoEnvio = { enviados: number; eliminados: number; fallidos: number };
+export type ResultadoEnvio = {
+  enviados: number;
+  eliminados: number;
+  fallidos: number;
+  /** Detalle de los rechazos: sin esto, un fallo es indepurable. */
+  errores: Array<{ servicio: string; codigo: number | string; motivo: string }>;
+};
 
 /**
  * Envía a todos los dispositivos de un usuario.
@@ -46,7 +52,8 @@ export type ResultadoEnvio = { enviados: number; eliminados: number; fallidos: n
  * genera errores en cada envío futuro.
  */
 export async function enviarAUsuario(userId: string, carga: Carga): Promise<ResultadoEnvio> {
-  if (!configurar()) return { enviados: 0, eliminados: 0, fallidos: 0 };
+  const vacio: ResultadoEnvio = { enviados: 0, eliminados: 0, fallidos: 0, errores: [] };
+  if (!configurar()) return vacio;
 
   const subs = await prisma.pushSubscription.findMany({ where: { userId } });
   const payload = JSON.stringify(carga);
@@ -54,9 +61,17 @@ export async function enviarAUsuario(userId: string, carga: Carga): Promise<Resu
   let enviados = 0;
   let eliminados = 0;
   let fallidos = 0;
+  const errores: ResultadoEnvio["errores"] = [];
 
   await Promise.all(
     subs.map(async (s) => {
+      let servicio = "desconocido";
+      try {
+        servicio = new URL(s.endpoint).host;
+      } catch {
+        /* endpoint corrupto: se reporta como desconocido */
+      }
+
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
@@ -65,16 +80,26 @@ export async function enviarAUsuario(userId: string, carga: Carga): Promise<Resu
         );
         enviados++;
       } catch (e: unknown) {
-        const codigo = (e as { statusCode?: number })?.statusCode;
+        const err = e as { statusCode?: number; body?: string; message?: string };
+        const codigo = err?.statusCode;
+
+        // 404/410: el dispositivo ya no existe. Conservarla solo genera
+        // ruido en cada envío futuro.
         if (codigo === 404 || codigo === 410) {
           await prisma.pushSubscription.delete({ where: { id: s.id } }).catch(() => {});
           eliminados++;
-        } else {
-          fallidos++;
+          return;
         }
+
+        fallidos++;
+        errores.push({
+          servicio,
+          codigo: codigo ?? "sin código",
+          motivo: (err?.body || err?.message || "sin detalle").slice(0, 220),
+        });
       }
     })
   );
 
-  return { enviados, eliminados, fallidos };
+  return { enviados, eliminados, fallidos, errores };
 }

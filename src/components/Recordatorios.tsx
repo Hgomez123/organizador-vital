@@ -225,15 +225,23 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
     try {
       const res = await fetch("/api/push/probar", { method: "POST" });
       const d = await res.json();
-      setAviso(
-        d.ok
-          ? `Enviado a ${d.enviados} ${d.enviados === 1 ? "dispositivo" : "dispositivos"}. Si no llega, revisa el diagnóstico.`
-          : d.eliminados > 0
-            ? "La suscripción estaba caducada y se eliminó. Pulsa Desconectar y vuelve a conectar."
-            : d.fallidos > 0
-              ? "El servicio de push rechazó el envío. Revisa el diagnóstico."
-              : "El servidor no encontró dispositivos registrados. Vuelve a conectar."
+
+      // El detalle del rechazo importa más que el resumen: sin él,
+      // "no llega" puede ser cinco causas distintas.
+      const partes: string[] = [];
+      partes.push(
+        `Enviados: ${d.enviados ?? 0} · Fallidos: ${d.fallidos ?? 0} · Caducados eliminados: ${d.eliminados ?? 0}`
       );
+      if (d.vapidSubjectValido === false) {
+        partes.push(`VAPID_SUBJECT inválido: "${d.vapidSubject}". Debe ser mailto:tucorreo@x.com`);
+      }
+      for (const e of d.errores ?? []) {
+        partes.push(`${e.servicio} → ${e.codigo}: ${e.motivo}`);
+      }
+      if (d.ok && !d.fallidos) {
+        partes.push("Cierra la app por completo: debería llegarte igual.");
+      }
+      setAviso(partes.join("\n"));
       await revisar();
     } finally {
       setOcupado(false);
@@ -418,7 +426,7 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
         )}
 
         {aviso && (
-          <p className="subpanel border-l-2 border-l-accent p-3 text-[length:var(--t-sm)]">
+          <p className="subpanel mono whitespace-pre-line border-l-2 border-l-accent p-3 text-[length:var(--t-xs)] leading-relaxed">
             {aviso}
           </p>
         )}
