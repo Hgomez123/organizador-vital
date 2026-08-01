@@ -157,15 +157,34 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
       }
 
       const sub = await reg.pushManager.getSubscription();
+      const conectado = Boolean(sub) && Notification.permission === "granted";
 
-      // Ambas condiciones: una suscripción sin permiso concedido no entrega
-      // nada. Dar por activo solo por la suscripción ocultaba el botón de
-      // conectar justo cuando hacía falta.
-      setEstado(sub && Notification.permission === "granted" ? "activo" : "inactivo");
+      // Autocuración: si el navegador tiene suscripción pero el servidor no
+      // la conoce (por una purga, un borrado o un cambio de claves), se
+      // vuelve a registrar sola. Sin esto el panel se muestra "conectado"
+      // mientras el servidor no tiene a dónde enviar — un punto muerto del
+      // que el usuario no puede salir.
+      if (conectado && dispositivos === 0 && sub) {
+        try {
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              suscripcion: sub.toJSON(),
+              tzOffsetMin: new Date().getTimezoneOffset(),
+            }),
+          });
+          if (res.ok) setEquipos((await res.json()).dispositivos ?? 1);
+        } catch {
+          /* si falla, el botón de reinicio sigue disponible */
+        }
+      }
+
+      setEstado(conectado ? "activo" : "inactivo");
     })();
 
     return () => window.removeEventListener("beforeinstallprompt", alInstalar);
-  }, [clavePublica]);
+  }, [clavePublica, dispositivos]);
 
   const conectar = async () => {
     setOcupado(true);
