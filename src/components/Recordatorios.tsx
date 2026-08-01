@@ -54,7 +54,38 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [instalable, setInstalable] = useState<Event | null>(null);
   const [instalada, setInstalada] = useState(false);
+  const [diag, setDiag] = useState<Record<string, string>>({});
+  const [verDiag, setVerDiag] = useState(false);
   const [, startTransition] = useTransition();
+
+  /** Estado real del dispositivo. Sin esto, "no llega nada" es indepurable. */
+  const revisar = async () => {
+    const d: Record<string, string> = {};
+    d["Modo"] = window.matchMedia("(display-mode: standalone)").matches
+      ? "instalada ✓"
+      : "navegador — en iPhone el push NO funciona así";
+    d["Notification API"] = "Notification" in window ? "sí" : "no";
+    d["PushManager"] = "PushManager" in window ? "sí" : "no";
+    d["Permiso"] = "Notification" in window ? Notification.permission : "n/d";
+    d["Clave VAPID"] = clavePublica ? "presente" : "AUSENTE en el servidor";
+
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      d["Service worker"] = reg ? "registrado" : "NO registrado";
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        d["Suscripción local"] = sub ? "activa" : "ninguna";
+        if (sub) d["Servicio"] = new URL(sub.endpoint).host;
+      }
+    } else {
+      d["Service worker"] = "no soportado";
+    }
+
+    d["Origen"] = window.location.host;
+    d["Registrados en servidor"] = String(equipos);
+    setDiag(d);
+    setVerDiag(true);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -162,9 +193,14 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
       const d = await res.json();
       setAviso(
         d.ok
-          ? "Enviado desde el servidor. Cierra la app: debería llegarte igual."
-          : "El servidor no encontró dispositivos. Vuelve a conectar."
+          ? `Enviado a ${d.enviados} ${d.enviados === 1 ? "dispositivo" : "dispositivos"}. Si no llega, revisa el diagnóstico.`
+          : d.eliminados > 0
+            ? "La suscripción estaba caducada y se eliminó. Pulsa Desconectar y vuelve a conectar."
+            : d.fallidos > 0
+              ? "El servicio de push rechazó el envío. Revisa el diagnóstico."
+              : "El servidor no encontró dispositivos registrados. Vuelve a conectar."
       );
+      await revisar();
     } finally {
       setOcupado(false);
     }
@@ -352,6 +388,35 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
             {aviso}
           </p>
         )}
+
+        {/* Diagnóstico: sin esto, "no llega nada" es imposible de depurar */}
+        <div className="border-t border-line pt-4">
+          <button
+            onClick={() => (verDiag ? setVerDiag(false) : revisar())}
+            className="label transition-colors hover:text-fg"
+          >
+            {verDiag ? "Ocultar diagnóstico" : "Ver diagnóstico ↓"}
+          </button>
+
+          {verDiag && (
+            <dl className="subpanel mt-3 divide-y divide-line p-3">
+              {Object.entries(diag).map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-3 py-1.5">
+                  <dt className="label shrink-0">{k}</dt>
+                  <dd
+                    className={`mono text-right text-[length:var(--t-micro)] ${
+                      /NO |AUSENTE|denied|ninguna|no soportado|navegador/.test(v)
+                        ? "text-alert"
+                        : "text-fg"
+                    }`}
+                  >
+                    {v}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
 
         {instalada ? (
           <p className="label border-t border-line pt-4">◆ Estás usando la app instalada</p>

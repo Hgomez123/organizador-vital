@@ -82,6 +82,28 @@ body {
   line-height: var(--lh-body);
 }
 
+/* ── Zonas seguras de iPhone ──
+   Instalada en pantalla de inicio, el contenido se dibuja bajo la isla
+   dinámica y bajo la barra de gestos. Sin estos márgenes, la navegación
+   queda tapada por el reloj y es imposible de tocar. */
+.zona-superior {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.zona-inferior {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1.5rem);
+}
+.zona-lados {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* Área táctil mínima recomendada en móvil: 44px */
+@media (max-width: 640px) {
+  nav a {
+    padding-block: 0.6rem;
+  }
+}
+
 /* ══════════════════════════════════════════════════════
    PRIMITIVAS — evitan repetir valores en cada componente
    ══════════════════════════════════════════════════════ */

@@ -41,6 +41,11 @@ export function Contador({ valor, decimales = 0, duracion = 1100, className }: P
       requestAnimationFrame(paso);
     };
 
+    if (typeof IntersectionObserver === "undefined") {
+      setActual(valor);
+      return;
+    }
+
     const obs = new IntersectionObserver(
       ([entrada]) => {
         if (entrada.isIntersecting && !yaCorrio.current) {
@@ -48,10 +53,23 @@ export function Contador({ valor, decimales = 0, duracion = 1100, className }: P
           animar();
         }
       },
-      { threshold: 0.4 }
+      { threshold: 0 }
     );
     obs.observe(nodo);
-    return () => obs.disconnect();
+
+    // Si el observador no dispara, mostrar el número igual:
+    // un indicador congelado en cero miente sobre tus datos.
+    const rescate = setTimeout(() => {
+      if (!yaCorrio.current) {
+        yaCorrio.current = true;
+        setActual(valor);
+      }
+    }, 2500);
+
+    return () => {
+      obs.disconnect();
+      clearTimeout(rescate);
+    };
   }, [valor, duracion]);
 
   return (

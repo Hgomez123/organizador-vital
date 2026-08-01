@@ -15,7 +15,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     title: "Vital",
-    statusBarStyle: "black-translucent",
+    // "default" evita que el contenido se dibuje bajo la barra de estado.
+    // Con "black-translucent" la cabecera quedaba tapada por la isla dinámica.
+    statusBarStyle: "default",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -46,8 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Saltar al contenido
         </a>
 
-        <header className="sticky top-0 z-40 border-b border-line bg-bg/70 backdrop-blur-md">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
+        <header className="zona-superior sticky top-0 z-40 border-b border-line bg-bg/90 backdrop-blur-md">
+          <div className="zona-lados mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 py-3">
             <Link
               href="/"
               className="shrink-0 text-[length:var(--t-sm)] font-bold uppercase tracking-widest"
@@ -58,11 +60,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <div id="contenido" className="relative z-10 mx-auto max-w-3xl px-5 pb-24 pt-8">
+        <div
+          id="contenido"
+          className="zona-lados relative z-10 mx-auto max-w-3xl px-5 pb-16 pt-8"
+        >
           {children}
         </div>
 
-        <footer className="label relative z-10 border-t border-line py-6 text-center">
+        <footer className="label zona-inferior relative z-10 border-t border-line pt-6 text-center">
           Diseña tu vida — un día a la vez
         </footer>
       </body>

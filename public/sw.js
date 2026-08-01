@@ -11,7 +11,7 @@
  * estáticos inmutables.
  */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE_APP = `vital-app-${VERSION}`;
 const ARMAZON = ["/", "/semana", "/comidas", "/metas", "/manifest.webmanifest", "/icons/icon-192.png"];
 
@@ -118,8 +118,8 @@ self.addEventListener("push", (evento) => {
       tag: "recordatorio-diario", // reemplaza el anterior en vez de apilarse
       renotify: true,
       data: { url: carga.url },
-      vibrate: [90, 50, 90],
-      actions: [{ action: "abrir", title: "Marcar tareas" }],
+      // Sin `actions` ni `vibrate`: Safari en iOS no los admite y puede
+      // descartar la notificación entera si aparecen.
     })
   );
 });
