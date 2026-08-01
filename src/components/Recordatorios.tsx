@@ -37,8 +37,22 @@ const ORDEN: TipoAvisoKey[] = [
 
 /** La clave VAPID viaja en base64url y pushManager la exige como bytes. */
 function base64UrlABytes(base64: string): Uint8Array<ArrayBuffer> {
-  const relleno = "=".repeat((4 - (base64.length % 4)) % 4);
-  const normal = (base64 + relleno).replace(/-/g, "+").replace(/_/g, "/");
+  // Saneamiento: al copiar la clave a las variables de entorno es fácil
+  // arrastrar comillas, espacios o saltos de línea. atob() los rechaza con
+  // "The string contains invalid characters", un mensaje que no dice dónde.
+  const limpia = base64
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\s/g, "");
+
+  if (!/^[A-Za-z0-9\-_]+=*$/.test(limpia)) {
+    throw new Error(
+      "La clave pública VAPID tiene caracteres inválidos. Revísala en las variables de entorno: debe ir sin comillas ni espacios."
+    );
+  }
+
+  const relleno = "=".repeat((4 - (limpia.length % 4)) % 4);
+  const normal = (limpia + relleno).replace(/-/g, "+").replace(/_/g, "/");
   const bin = atob(normal);
   const buffer = new ArrayBuffer(bin.length);
   const bytes = new Uint8Array(buffer);
@@ -67,7 +81,15 @@ export function Recordatorios({ clavePublica, avisos, dispositivos }: Props) {
     d["Notification API"] = "Notification" in window ? "sí" : "no";
     d["PushManager"] = "PushManager" in window ? "sí" : "no";
     d["Permiso"] = "Notification" in window ? Notification.permission : "n/d";
-    d["Clave VAPID"] = clavePublica ? "presente" : "AUSENTE en el servidor";
+    if (!clavePublica) {
+      d["Clave VAPID"] = "AUSENTE en el servidor";
+    } else {
+      const limpia = clavePublica.trim().replace(/^["']|["']$/g, "");
+      const valida = /^[A-Za-z0-9\-_]+=*$/.test(limpia) && limpia.length > 80;
+      d["Clave VAPID"] = valida
+        ? `válida (${limpia.length} car.)`
+        : `INVÁLIDA — revisa comillas o espacios (${clavePublica.length} car.)`;
+    }
 
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
