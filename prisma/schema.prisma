@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Dominio {
+  COMIDAS
+  LIMPIEZA
+  ESTUDIO
+  TIEMPO_LIBRE
+  GENERAL
+}
+
+enum Recurrencia {
+  DIARIA
+  SEMANAL // usa `diasSemana`
+  UNICA
+}
+
+enum EstadoLog {
+  HECHO
+  SALTADO
+  POSPUESTO
+}
+
+enum TipoComida {
+  DESAYUNO
+  ALMUERZO
+  CENA
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nombre    String
+  createdAt DateTime @default(now())
+
+  /** Desfase respecto a UTC en minutos, tal como lo reporta el navegador */
+  tzOffsetMin Int @default(0)
+
+  goals         Goal[]
+  tasks         Task[]
+  studySessions StudySession[]
+  recipes       Recipe[]
+  mealPlans     MealPlan[]
+  pushSubs      PushSubscription[]
+  avisos        Aviso[]
+}
+
+enum TipoAviso {
+  PLAN_MANANA
+  EMPUJON_TARDE
+  REGISTRO_NOCHE
+  REVISION_SEMANAL
+}
+
+/**
+ * Un aviso por momento del día. Separarlos permite que cada uno tenga su
+ * hora, su condición para callarse y su propio registro de último envío.
+ */
+model Aviso {
+  id     String    @id @default(cuid())
+  userId String
+  tipo   TipoAviso
+  activo Boolean   @default(false)
+  /** "HH:MM" en hora local del usuario */
+  hora   String
+  /** Solo para REVISION_SEMANAL: 0=domingo … 6=sábado */
+  diaSemana   Int?
+  ultimoEnvio DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tipo])
+  @@index([userId])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  /** URL única que identifica al dispositivo ante el servicio de push */
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  agente    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Recipe {
+  id       String   @id @default(cuid())
+  userId   String
+  nombre   String
+  /** Lista de ingredientes en texto libre, uno por elemento */
+  ingredientes String[] @default([])
+  /** Categoría de compra para agrupar la lista: verdura, proteína, despensa… */
+  categoria String   @default("Despensa")
+  minutos  Int?
+  createdAt DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id])
+  mealPlans MealPlan[]
+}
+
+model MealPlan {
+  id       String     @id @default(cuid())
+  userId   String
+  /** Lunes de la semana, en UTC a medianoche */
+  semana   DateTime   @db.Date
+  /** 0=domingo … 6=sábado */
+  dia      Int
+  tipo     TipoComida
+  recipeId String?
+  /** Alternativa libre cuando no hay receta guardada */
+  texto    String?
+
+  user   User    @relation(fields: [userId], references: [id])
+  recipe Recipe? @relation(fields: [recipeId], references: [id])
+
+  @@unique([userId, semana, dia, tipo])
+}
+
+model Goal {
+  id            String    @id @default(cuid())
+  userId        String
+  dominio       Dominio
+  titulo        String
+  metrica       String // ej. "horas/semana"
+  valorObjetivo Float
+  fechaLimite   DateTime?
+  createdAt     DateTime  @default(now())
+
+  user       User        @relation(fields: [userId], references: [id])
+  tasks      Task[]
+  challenges Challenge[]
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  userId      String
+  goalId      String?
+  dominio     Dominio
+  titulo      String
+  recurrencia Recurrencia @default(DIARIA)
+  diasSemana  Int[]       @default([]) // 0=domingo ... 6=sábado (solo SEMANAL)
+  duracionMin Int? // duración estimada
+  activa      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+
+  user User      @relation(fields: [userId], references: [id])
+  goal Goal?     @relation(fields: [goalId], references: [id])
+  logs TaskLog[]
+}
+
+model TaskLog {
+  id     String    @id @default(cuid())
+  taskId String
+  fecha  DateTime  @db.Date
+  estado EstadoLog
+  nota   String?
+
+  task Task @relation(fields: [taskId], references: [id])
+
+  @@unique([taskId, fecha])
+}
+
+model Challenge {
+  id           String   @id @default(cuid())
+  goalId       String
+  titulo       String
+  duracionDias Int      @default(21)
+  rachaActual  Int      @default(0)
+  rachaMaxima  Int      @default(0)
+  iniciadoEn   DateTime @default(now())
+
+  goal Goal @relation(fields: [goalId], references: [id])
+}
+
+model StudySession {
+  id        String    @id @default(cuid())
+  userId    String
+  materia   String
+  inicio    DateTime
+  fin       DateTime?
+  pomodoros Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id])
+}

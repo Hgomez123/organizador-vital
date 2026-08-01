@@ -1,0 +1,19 @@
+# Dependencias
+node_modules
+
+# Compilación
+.next
+out
+*.tsbuildinfo
+next-env.d.ts
+
+# Entorno — NUNCA subir: contiene claves privadas
+.env
+.env.local
+.env*.local
+
+# Sistema
+.DS_Store
+
+# Vercel
+.vercel

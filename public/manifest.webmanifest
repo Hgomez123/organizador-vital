@@ -1,0 +1,28 @@
+{
+  "name": "Organizador Vital",
+  "short_name": "Vital",
+  "description": "Organiza tu vida: metas, comidas, limpieza, estudio y tiempo libre, con seguimiento real.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "es",
+  "categories": ["productivity", "lifestyle", "health"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Hoy", "url": "/", "description": "Tus tareas de hoy" },
+    { "name": "Semana", "url": "/semana", "description": "Mapa de la semana" },
+    { "name": "Comidas", "url": "/comidas", "description": "Menú y lista de compras" }
+  ]
+}

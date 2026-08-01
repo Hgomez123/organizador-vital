@@ -1,0 +1,42 @@
+name: Programador de avisos
+
+# Vercel en plan Hobby solo permite crons diarios, así que el programador
+# vive aquí: GitHub Actions no tiene ese límite y es gratis en repos públicos
+# (y con minutos incluidos en los privados).
+#
+# Requiere dos secretos en Settings → Secrets and variables → Actions:
+#   APP_URL      → https://tu-app.vercel.app
+#   CRON_SECRET  → el mismo valor que pusiste en Vercel
+
+on:
+  schedule:
+    # Cada 15 minutos. GitHub puede retrasarlo unos minutos cuando hay carga;
+    # por eso el endpoint acepta una ventana de 20 min en vez de exigir
+    # la hora exacta.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # permite dispararlo a mano desde la pestaña Actions
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Llamar al programador de avisos
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "Faltan los secretos APP_URL o CRON_SECRET"
+            exit 1
+          fi
+
+          respuesta=$(curl -sS -w "\n%{http_code}" \
+            -H "authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/recordatorios")
+
+          codigo=$(echo "$respuesta" | tail -n1)
+          cuerpo=$(echo "$respuesta" | sed '$d')
+
+          echo "$cuerpo"
+
+          if [ "$codigo" != "200" ]; then
+            echo "El endpoint respondió $codigo"
+            exit 1
+          fi
