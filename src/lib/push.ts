@@ -21,20 +21,56 @@ export type Carga = {
 
 let configurado = false;
 
+/** Último motivo por el que la configuración falló, para poder reportarlo. */
+export let fallaConfiguracion: string | null = null;
+
 export function pushDisponible(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
 }
 
+/** Quita comillas y espacios: al pegar en paneles web se cuelan con facilidad. */
+function limpiar(v: string | undefined): string {
+  return (v ?? "").trim().replace(/^["']|["']$/g, "");
+}
+
 function configurar(): boolean {
   if (configurado) return true;
-  if (!pushDisponible()) return false;
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || "mailto:sin-configurar@ejemplo.com",
-    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-    process.env.VAPID_PRIVATE_KEY!
-  );
+  if (!pushDisponible()) {
+    fallaConfiguracion = "Faltan NEXT_PUBLIC_VAPID_PUBLIC_KEY o VAPID_PRIVATE_KEY";
+    return false;
+  }
+
+  let asunto = limpiar(process.env.VAPID_SUBJECT);
+  // Tolerar que se haya guardado solo el correo: es el error más común
+  // y no justifica tumbar la función entera.
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(asunto)) asunto = `mailto:${asunto}`;
+  if (!/^(mailto:\S+@\S+|https:\/\/\S+)$/.test(asunto)) {
+    fallaConfiguracion = `VAPID_SUBJECT inválido: "${asunto || "(vacío)"}". Debe ser mailto:tucorreo@dominio.com`;
+    return false;
+  }
+
+  try {
+    webpush.setVapidDetails(
+      asunto,
+      limpiar(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+      limpiar(process.env.VAPID_PRIVATE_KEY)
+    );
+  } catch (e) {
+    // setVapidDetails lanza si alguna clave está mal formada. Sin este
+    // try/catch, la función devolvía 500 con cuerpo vacío: indepurable.
+    fallaConfiguracion = e instanceof Error ? e.message : "Claves VAPID mal formadas";
+    return false;
+  }
+
+  fallaConfiguracion = null;
   configurado = true;
   return true;
+}
+
+/** Comprueba la configuración sin enviar nada. */
+export function estadoConfiguracion(): { ok: boolean; motivo: string | null } {
+  const ok = configurar();
+  return { ok, motivo: fallaConfiguracion };
 }
 
 export type ResultadoEnvio = {

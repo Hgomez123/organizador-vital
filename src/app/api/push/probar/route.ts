@@ -1,31 +1,61 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/user";
-import { enviarAUsuario, pushDisponible } from "@/lib/push";
+import { enviarAUsuario, pushDisponible, estadoConfiguracion } from "@/lib/push";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-/** Envío inmediato de prueba: comprueba la cadena completa sin esperar la hora. */
+/**
+ * Envío inmediato de prueba.
+ * Todo va envuelto en try/catch: una excepción aquí devolvía un 500 con
+ * cuerpo vacío, que no dice nada sobre la causa.
+ */
 export async function POST() {
-  if (!pushDisponible()) {
-    return NextResponse.json({ error: "Push no configurado" }, { status: 503 });
+  try {
+    if (!pushDisponible()) {
+      return NextResponse.json(
+        { ok: false, error: "Faltan las claves VAPID en el servidor" },
+        { status: 503 }
+      );
+    }
+
+    const cfg = estadoConfiguracion();
+    if (!cfg.ok) {
+      return NextResponse.json({ ok: false, error: cfg.motivo }, { status: 503 });
+    }
+
+    const user = await getCurrentUser();
+    const r = await enviarAUsuario(user.id, {
+      titulo: "Prueba de recordatorio",
+      cuerpo: "Si ves esto con la app cerrada, el push real está funcionando.",
+      url: "/",
+    });
+
+    return NextResponse.json({
+      ok: r.enviados > 0,
+      ...r,
+      vapidSubject: process.env.VAPID_SUBJECT ?? "(sin definir)",
+      vapidSubjectValido: true,
+    });
+  } catch (e) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: e instanceof Error ? e.message : "Error desconocido",
+        pista: "Revisa VAPID_SUBJECT, las claves VAPID y DATABASE_URL en Vercel.",
+      },
+      { status: 500 }
+    );
   }
+}
 
-  const user = await getCurrentUser();
-  const r = await enviarAUsuario(user.id, {
-    titulo: "Prueba de recordatorio",
-    cuerpo: "Si ves esto con la app cerrada, el push real está funcionando.",
-    url: "/",
-  });
-
-  // El asunto VAPID es la causa más común de rechazo: Apple exige un
-  // mailto: o https: válido en el token, y falla en silencio si no lo es.
-  const asunto = process.env.VAPID_SUBJECT ?? "(sin definir)";
-  const asuntoValido = /^(mailto:\S+@\S+|https:\/\/\S+)$/.test(asunto);
-
+/** GET: comprueba la configuración sin enviar nada. Útil desde el navegador. */
+export async function GET() {
+  const cfg = estadoConfiguracion();
   return NextResponse.json({
-    ok: r.enviados > 0,
-    ...r,
-    vapidSubject: asunto,
-    vapidSubjectValido: asuntoValido,
+    clavesPresentes: pushDisponible(),
+    configuracionValida: cfg.ok,
+    motivo: cfg.motivo,
+    vapidSubject: process.env.VAPID_SUBJECT ?? "(sin definir)",
   });
 }
